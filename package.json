@@ -1,0 +1,83 @@
+{
+  "name": "claude-daw",
+  "version": "0.1.0",
+  "description": "A Digital Audio Workstation controlled 100% by Claude",
+  "main": "dist-electron/main.js",
+  "author": {
+    "name": "Aurumo"
+  },
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "start": "vite",
+    "build": "vite build",
+    "dist": "vite build && electron-builder --win --publish never",
+    "dist:dir": "vite build && electron-builder --win --dir",
+    "release": "vite build && electron-builder --win --publish always"
+  },
+  "keywords": [
+    "daw",
+    "music",
+    "claude",
+    "ai",
+    "electron",
+    "tonejs"
+  ],
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.30.1",
+    "@types/node": "^20.14.9",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "dotenv": "^16.4.5",
+    "electron": "^30.1.0",
+    "electron-builder": "^24.13.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tone": "14.7.77",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.3",
+    "vite-plugin-electron": "^0.28.7",
+    "vite-plugin-electron-renderer": "^0.14.5",
+    "zustand": "^4.5.4"
+  },
+  "build": {
+    "appId": "se.aurumo.daw",
+    "productName": "Aurumo DAW",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "node_modules/**",
+      "package.json"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "AurumoConsultants",
+        "repo": "aurumo-daw",
+        "releaseType": "release"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Aurumo DAW"
+    }
+  }
+}
