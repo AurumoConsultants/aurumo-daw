@@ -1,6 +1,6 @@
 {
   "name": "claude-daw",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A Digital Audio Workstation controlled 100% by Claude",
   "main": "dist-electron/main.js",
   "author": {
