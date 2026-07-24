@@ -92,7 +92,7 @@ export default function FreeJam({ open, onClose }: { open: boolean; onClose: () 
     <div className="modal-backdrop">
       <div className="jam">
         <div className="jam-head">
-          <h2>🎙 Free Jam</h2>
+          <h2>🎙 Jamalam</h2>
           {!recording && (
             <button className="ghost" onClick={onClose}>
               Close
@@ -102,11 +102,12 @@ export default function FreeJam({ open, onClose }: { open: boolean; onClose: () 
 
         {!recording ? (
           <p className="jam-sub">
-            Hit record and just vibe — sing, beatbox, clap, play. Jamalam listens and captures the
-            whole session to build a song from. Flag the good moments as they happen.
+            <em>Jamalam</em> <span className="jam-verb">(verb)</span>: to jam, play, vibe, and
+            create music on the go. Hit record and just vibe — sing, beatbox, clap, play. It
+            captures the whole session to build a song from; flag the good moments as they happen.
           </p>
         ) : (
-          <p className="jam-sub recording">Recording… the DAW is listening.</p>
+          <p className="jam-sub recording">Recording… Jamalam is listening.</p>
         )}
 
         <div className="jam-meter">

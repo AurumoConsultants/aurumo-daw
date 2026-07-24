@@ -26,8 +26,8 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <Transport />
-        <button className="jam-launch" onClick={() => setShowJam(true)} title="Record a live jam">
-          🎙 Free Jam
+        <button className="jam-launch" onClick={() => setShowJam(true)} title="Jamalam — jam, play, vibe, create music on the go">
+          🎙 Jamalam
         </button>
         <button className="gear" onClick={() => setShowKey(true)} title="API key settings">
           {hasKey ? '⚙' : '⚙ Connect'}
