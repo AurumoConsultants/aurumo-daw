@@ -291,9 +291,21 @@ body {
   }
 }
 .brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: var(--muted);
   font-weight: 600;
   letter-spacing: 0.5px;
+}
+.brand-wordmark {
+  height: 20px;
+  width: auto;
+  display: block;
+}
+.brand-studio {
+  font-size: 14px;
+  color: var(--muted);
 }
 .gear {
   background: var(--panel-2);

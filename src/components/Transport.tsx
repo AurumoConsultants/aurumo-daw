@@ -28,7 +28,10 @@ export default function Transport() {
           </select>
         </label>
       </div>
-      <div className="brand">🎛 Jamalam Studio</div>
+      <div className="brand">
+        <img className="brand-wordmark" src="./brand/wordmark.png" alt="Jamalam" />
+        <span className="brand-studio">Studio</span>
+      </div>
     </div>
   )
 }
