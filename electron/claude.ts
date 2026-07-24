@@ -140,7 +140,7 @@ const tools: Anthropic.Tool[] = [
 ]
 
 function systemPrompt(project: any): string {
-  return `You are the engine of "Aurumo DAW", a music production app that you control entirely through tools.
+  return `You are the engine of "Jamalam Studio", a music production app that you control entirely through tools.
 The user talks to you in chat; you build and edit the song by calling tools. There is a live piano-roll and mixer the user watches update as you work.
 
 How to work:

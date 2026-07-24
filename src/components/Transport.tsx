@@ -28,7 +28,7 @@ export default function Transport() {
           </select>
         </label>
       </div>
-      <div className="brand">🎛 Aurumo DAW</div>
+      <div className="brand">🎛 Jamalam Studio</div>
     </div>
   )
 }

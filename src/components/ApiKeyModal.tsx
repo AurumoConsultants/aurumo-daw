@@ -19,7 +19,7 @@ export default function ApiKeyModal({ onClose }: { onClose: () => void }) {
       <div className="modal">
         <h2>Connect Claude</h2>
         <p>
-          Aurumo DAW drives the studio through the Anthropic API. Paste an API key to begin — it's
+          Jamalam Studio is powered by Claude through the Anthropic API. Paste an API key to begin — it's
           stored locally on this machine only.
         </p>
         <input

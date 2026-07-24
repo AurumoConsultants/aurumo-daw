@@ -1,4 +1,4 @@
-' Launches Aurumo DAW without leaving a console window open.
+' Launches Jamalam Studio without leaving a console window open.
 Set sh = CreateObject("WScript.Shell")
 scriptDir = Left(WScript.ScriptFullName, InStrRev(WScript.ScriptFullName, "\"))
 sh.CurrentDirectory = scriptDir

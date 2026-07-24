@@ -1,6 +1,6 @@
 {
-  "name": "claude-daw",
-  "version": "0.1.1",
+  "name": "jamalam-studio",
+  "version": "0.2.0",
   "description": "A Digital Audio Workstation controlled 100% by Claude",
   "main": "dist-electron/main.js",
   "author": {
@@ -45,8 +45,8 @@
     "zustand": "^4.5.4"
   },
   "build": {
-    "appId": "se.aurumo.daw",
-    "productName": "Aurumo DAW",
+    "appId": "se.aurumo.jamalamstudio",
+    "productName": "Jamalam Studio",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -61,7 +61,7 @@
       {
         "provider": "github",
         "owner": "AurumoConsultants",
-        "repo": "aurumo-daw",
+        "repo": "jamalam-studio",
         "releaseType": "release"
       }
     ],
@@ -77,7 +77,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Aurumo DAW"
+      "shortcutName": "Jamalam Studio"
     }
   }
 }

@@ -1,4 +1,4 @@
-# 🎛 Aurumo DAW
+# 🎛 Jamalam Studio
 
 A desktop **Digital Audio Workstation controlled 100% by Claude**. You don't click around a mixer — you *talk* to Claude, and it builds the song for you: tracks, drum patterns, basslines, chord progressions, tempo, mixing. A live piano roll and track list update in real time as Claude works, and you hear the result instantly.
 

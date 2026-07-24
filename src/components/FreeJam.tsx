@@ -102,7 +102,7 @@ export default function FreeJam({ open, onClose }: { open: boolean; onClose: () 
 
         {!recording ? (
           <p className="jam-sub">
-            Hit record and just vibe — sing, beatbox, clap, play. Aurumo listens and captures the
+            Hit record and just vibe — sing, beatbox, clap, play. Jamalam listens and captures the
             whole session to build a song from. Flag the good moments as they happen.
           </p>
         ) : (

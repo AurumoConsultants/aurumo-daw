@@ -66,7 +66,7 @@ function createWindow() {
     minWidth: 1000,
     minHeight: 640,
     backgroundColor: '#0e0f13',
-    title: 'Aurumo DAW',
+    title: 'Jamalam Studio',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       sandbox: false,
