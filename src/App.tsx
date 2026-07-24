@@ -6,11 +6,13 @@ import PianoRoll from './components/PianoRoll'
 import ChatPanel from './components/ChatPanel'
 import ApiKeyModal from './components/ApiKeyModal'
 import UpdateBanner from './components/UpdateBanner'
+import FreeJam from './components/FreeJam'
 
 export default function App() {
   const hasKey = useStore((s) => s.hasKey)
   const setHasKey = useStore((s) => s.setHasKey)
   const [showKey, setShowKey] = useState(false)
+  const [showJam, setShowJam] = useState(false)
 
   useEffect(() => {
     if (!window.daw) return
@@ -24,6 +26,9 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <Transport />
+        <button className="jam-launch" onClick={() => setShowJam(true)} title="Record a live jam">
+          🎙 Free Jam
+        </button>
         <button className="gear" onClick={() => setShowKey(true)} title="API key settings">
           {hasKey ? '⚙' : '⚙ Connect'}
         </button>
@@ -44,6 +49,7 @@ export default function App() {
       </div>
 
       {showKey && <ApiKeyModal onClose={() => setShowKey(false)} />}
+      <FreeJam open={showJam} onClose={() => setShowJam(false)} />
       <UpdateBanner />
     </div>
   )

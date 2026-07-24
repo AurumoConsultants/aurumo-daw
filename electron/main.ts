@@ -1,8 +1,10 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, net, protocol, session, shell } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
+import { pathToFileURL } from 'node:url'
 import 'dotenv/config'
 import { runChat } from './claude'
+import { jamStart, jamChunk, jamFlag, jamStop, jamList, recordingsDir } from './recorder'
 import electronUpdater from 'electron-updater'
 
 const { autoUpdater } = electronUpdater
@@ -14,6 +16,30 @@ const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
 const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 let win: BrowserWindow | null = null
+
+// Serve the packaged renderer over a custom secure scheme (not file://) so that
+// getUserMedia / AudioWorklet (Free Jam) run in a secure context in production.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'app',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
+  },
+])
+
+function registerAppProtocol() {
+  protocol.handle('app', (request) => {
+    const url = new URL(request.url)
+    const rel = decodeURIComponent(url.pathname).replace(/^\/+/, '') || 'index.html'
+    const abs = path.normalize(path.join(RENDERER_DIST, rel))
+    if (abs !== RENDERER_DIST && !abs.startsWith(RENDERER_DIST + path.sep)) {
+      return new Response('Forbidden', { status: 403 })
+    }
+    // net.fetch handles file streaming + content-type; fall back to index.html for SPA routes
+    return net.fetch(pathToFileURL(abs).toString()).catch(() =>
+      net.fetch(pathToFileURL(path.join(RENDERER_DIST, 'index.html')).toString()),
+    )
+  })
+}
 
 // ---- lightweight config store (API key) ----
 function configPath() {
@@ -52,7 +78,7 @@ function createWindow() {
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)
   } else {
-    win.loadFile(path.join(RENDERER_DIST, 'index.html'))
+    win.loadURL('app://bundle/index.html')
   }
 }
 
@@ -77,6 +103,14 @@ ipcMain.handle('claude:chat', async (_e, payload: { messages: any[]; project: an
     return { error: 'api_error', message: String(err?.message || err), text: '', commands: [] }
   }
 })
+
+// ---- Free Jam recording ----
+ipcMain.handle('jam:start', (_e, sampleRate: number) => jamStart(sampleRate))
+ipcMain.on('jam:chunk', (_e, id: string, bytes: Uint8Array) => jamChunk(id, Buffer.from(bytes)))
+ipcMain.handle('jam:flag', (_e, id: string, ms: number) => jamFlag(id, ms))
+ipcMain.handle('jam:stop', (_e, id: string) => jamStop(id))
+ipcMain.handle('jam:list', () => jamList())
+ipcMain.handle('jam:openFolder', () => shell.openPath(recordingsDir()))
 
 // ---- auto-update (packaged builds only) ----
 function sendUpdate(status: Record<string, unknown>) {
@@ -115,6 +149,10 @@ ipcMain.handle('update:restart', () => {
 })
 
 app.whenReady().then(() => {
+  // allow microphone access for Free Jam (local trusted app)
+  session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(true))
+  session.defaultSession.setPermissionCheckHandler(() => true)
+  if (!VITE_DEV_SERVER_URL) registerAppProtocol()
   createWindow()
   setupAutoUpdate()
 })

@@ -25,4 +25,15 @@ contextBridge.exposeInMainWorld('daw', {
     ipcRenderer.on('update:status', listener)
     return () => ipcRenderer.removeListener('update:status', listener)
   },
+
+  // Free Jam recording
+  jam: {
+    start: (sampleRate: number): Promise<{ id: string; filePath: string }> =>
+      ipcRenderer.invoke('jam:start', sampleRate),
+    chunk: (id: string, bytes: Uint8Array): void => ipcRenderer.send('jam:chunk', id, bytes),
+    flag: (id: string, ms: number): Promise<void> => ipcRenderer.invoke('jam:flag', id, ms),
+    stop: (id: string): Promise<any> => ipcRenderer.invoke('jam:stop', id),
+    list: (): Promise<any[]> => ipcRenderer.invoke('jam:list'),
+    openFolder: (): Promise<void> => ipcRenderer.invoke('jam:openFolder'),
+  },
 })

@@ -12,6 +12,14 @@ declare global {
       checkForUpdates: () => Promise<any>
       restartToUpdate: () => Promise<void>
       onUpdateStatus: (cb: (status: UpdateStatus) => void) => () => void
+      jam: {
+        start: (sampleRate: number) => Promise<{ id: string; filePath: string }>
+        chunk: (id: string, bytes: Uint8Array) => void
+        flag: (id: string, ms: number) => Promise<void>
+        stop: (id: string) => Promise<JamMeta | null>
+        list: () => Promise<JamMeta[]>
+        openFolder: () => Promise<void>
+      }
     }
   }
 
@@ -20,5 +28,14 @@ declare global {
     version?: string
     percent?: number
     message?: string
+  }
+
+  type JamMeta = {
+    id: string
+    filePath: string
+    durationSec: number
+    sampleRate: number
+    flags: number[]
+    createdAt: number
   }
 }
