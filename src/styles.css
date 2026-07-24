@@ -106,6 +106,20 @@ body {
 .jam-launch:hover {
   filter: brightness(1.08);
 }
+.beatbox-launch {
+  background: linear-gradient(135deg, #4cc9a0, #5aa9e6);
+  color: #06231b;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.beatbox-launch:hover {
+  filter: brightness(1.06);
+}
 
 .jam {
   width: 460px;

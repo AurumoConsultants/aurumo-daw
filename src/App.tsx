@@ -7,12 +7,14 @@ import ChatPanel from './components/ChatPanel'
 import ApiKeyModal from './components/ApiKeyModal'
 import UpdateBanner from './components/UpdateBanner'
 import FreeJam from './components/FreeJam'
+import BeatboxToDrums from './components/BeatboxToDrums'
 
 export default function App() {
   const hasKey = useStore((s) => s.hasKey)
   const setHasKey = useStore((s) => s.setHasKey)
   const [showKey, setShowKey] = useState(false)
   const [showJam, setShowJam] = useState(false)
+  const [showBeatbox, setShowBeatbox] = useState(false)
 
   useEffect(() => {
     if (!window.daw) return
@@ -28,6 +30,9 @@ export default function App() {
         <Transport />
         <button className="jam-launch" onClick={() => setShowJam(true)} title="Jamalam — jam, play, vibe, create music on the go">
           🎙 Jamalam
+        </button>
+        <button className="beatbox-launch" onClick={() => setShowBeatbox(true)} title="Beatbox → Drums: turn mouth drums into a real kit">
+          🥁 Beatbox
         </button>
         <button className="gear" onClick={() => setShowKey(true)} title="API key settings">
           {hasKey ? '⚙' : '⚙ Connect'}
@@ -50,6 +55,7 @@ export default function App() {
 
       {showKey && <ApiKeyModal onClose={() => setShowKey(false)} />}
       <FreeJam open={showJam} onClose={() => setShowJam(false)} />
+      <BeatboxToDrums open={showBeatbox} onClose={() => setShowBeatbox(false)} />
       <UpdateBanner />
     </div>
   )
