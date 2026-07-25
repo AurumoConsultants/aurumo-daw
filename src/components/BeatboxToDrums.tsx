@@ -1,11 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../state/store'
 import { engine } from '../audio/engine'
-import { analyzeBeatbox, type Hit, type BeatboxResult, type DrumProfile } from '../audio/beatbox'
+import { analyzeBeatbox, requantize, type Hit, type BeatboxResult, type DrumProfile } from '../audio/beatbox'
 import { loadProfile } from '../audio/profile'
 import BeatboxCalibrate from './BeatboxCalibrate'
 
 const DRUM_LABELS: Record<string, string> = { kick: 'kick', snare: 'snare', hihat: 'hi-hat', openhat: 'open-hat' }
+
+interface Layer {
+  id: string
+  name: string
+  trackNames: string[]
+  muted: boolean
+}
 
 type Phase = 'idle' | 'recording' | 'analyzing' | 'done'
 
@@ -14,9 +21,10 @@ function fmt(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-// audio constraints for a given input device ('' = system default)
-function micConstraints(deviceId: string): MediaStreamConstraints {
-  const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+// audio constraints for a given input device ('' = system default).
+// `overdub` turns on echo cancellation so a looping part doesn't leak into a new take.
+function micConstraints(deviceId: string, overdub = false): MediaStreamConstraints {
+  const base = { echoCancellation: overdub, noiseSuppression: false, autoGainControl: false }
   return { audio: deviceId ? { ...base, deviceId: { exact: deviceId } } : base }
 }
 
@@ -30,6 +38,7 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
   const [deviceId, setDeviceId] = useState<string>('') // '' = system default
   const [profile, setProfile] = useState<DrumProfile>({})
   const [showCalib, setShowCalib] = useState(false)
+  const [layers, setLayers] = useState<Layer[]>([])
 
   const recRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -40,7 +49,11 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
   const rafRef = useRef(0)
   const bufRef = useRef<Float32Array>(new Float32Array(2048))
   const peakRef = useRef(0) // loudest input seen this take — detects a silent mic
-  const createdRef = useRef<string[]>([]) // drum tracks this take added, so Delete can remove them
+  const createdRef = useRef<string[]>([]) // the un-kept preview take's track names
+  const analysisRef = useRef<BeatboxResult | null>(null)
+  const layerRef = useRef(0) // number of parts kept (used to give new parts fresh names)
+  const sessionBpmRef = useRef<number | null>(null) // locked once the first part is kept
+  const sessionBarsRef = useRef<number | null>(null)
 
   // ---- live input monitor (so you can pick a mic and SEE it register) ----
   const monStreamRef = useRef<MediaStream | null>(null)
@@ -148,7 +161,8 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
     // unlock the audio engine within this click gesture so playback works later
     engine.ensureStarted().catch(() => {})
     try {
-      const stream = await navigator.mediaDevices.getUserMedia(micConstraints(deviceId))
+      const overdub = layers.length > 0
+      const stream = await navigator.mediaDevices.getUserMedia(micConstraints(deviceId, overdub))
       streamRef.current = stream
       const ctx = new AudioContext()
       ctxRef.current = ctx
@@ -224,11 +238,12 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
         setPhase('idle')
         return
       }
-      await buildDrums(analysis)
+      analysisRef.current = analysis
+      const built = await buildDrums(analysis)
 
       const counts: Record<string, number> = {}
-      for (const h of analysis.hits) counts[h.type] = (counts[h.type] || 0) + 1
-      setSummary({ bpm: analysis.bpm, counts, total: analysis.hits.length })
+      for (const h of built.hits) counts[h.type] = (counts[h.type] || 0) + 1
+      setSummary({ bpm: built.bpm, counts, total: built.hits.length })
       setPhase('done')
     } catch (e: any) {
       setError(e?.message || 'Could not analyze the recording.')
@@ -236,18 +251,30 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
     }
   }
 
-  async function buildDrums(a: BeatboxResult) {
+  // Build the current (un-kept) take's drums. If a session tempo is already
+  // locked (a part was kept), snap this take to it and give it fresh names so
+  // the kept parts keep looping alongside.
+  async function buildDrums(a: BeatboxResult): Promise<{ bpm: number; hits: Hit[] }> {
     const order: Array<[Hit['type'], string]> = [
       ['kick', 'Kick'],
       ['snare', 'Snare'],
       ['hihat', 'Hihat'],
       ['openhat', 'Open Hat'],
     ]
-    const cmds: any[] = [{ type: 'set_tempo', bpm: a.bpm }]
+    const locked = sessionBpmRef.current != null
+    const bpm = locked ? (sessionBpmRef.current as number) : a.bpm
+    const bars = locked ? (sessionBarsRef.current as number) : a.bars
+    const hits = locked ? requantize(a.raw, bpm).hits : a.hits
+    const suffix = layerRef.current === 0 ? '' : ` ${layerRef.current + 1}`
+
+    const cmds: any[] = [{ type: 'set_tempo', bpm }]
+    // drop the previous (un-kept) preview tracks first
+    for (const name of createdRef.current) cmds.push({ type: 'remove_track', track: name })
     const created: string[] = []
-    for (const [type, name] of order) {
-      const group = a.hits.filter((h) => h.type === type)
+    for (const [type, base] of order) {
+      const group = hits.filter((h) => h.type === type)
       if (!group.length) continue
+      const name = base + suffix
       created.push(name)
       cmds.push({ type: 'add_track', name, instrument: type })
       cmds.push({ type: 'clear_track', track: name })
@@ -260,21 +287,71 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
       cmds.push({ type: 'add_notes', track: name, notes })
     }
     createdRef.current = created
-    cmds.push({ type: 'set_loop', bars: a.bars })
+    cmds.push({ type: 'set_loop', bars })
     cmds.push({ type: 'transport', action: 'play' })
     await useStore.getState().applyCommands(cmds)
+    return { bpm, hits }
   }
 
-  // discard the current take: stop playback and remove the drum tracks it added
+  // Commit the current take as its own looping part.
+  function keepAsTrack() {
+    if (!createdRef.current.length || !analysisRef.current) return
+    if (sessionBpmRef.current == null) {
+      sessionBpmRef.current = summary?.bpm ?? analysisRef.current.bpm
+      sessionBarsRef.current = analysisRef.current.bars
+    }
+    const types = summary ? Object.keys(summary.counts) : []
+    const name = types.map((t) => DRUM_LABELS[t] || t).join(' + ') || 'Part'
+    setLayers((ls) => [...ls, { id: `L${Date.now().toString(36)}`, name, trackNames: createdRef.current.slice(), muted: false }])
+    layerRef.current += 1
+    createdRef.current = []
+    analysisRef.current = null
+    setSummary(null)
+    setPhase('idle')
+  }
+
+  // discard the current take (keeps any kept parts looping)
   async function discard() {
-    const cmds: any[] = [{ type: 'transport', action: 'stop' }]
+    const noLayers = layers.length === 0
+    const cmds: any[] = []
     for (const name of createdRef.current) cmds.push({ type: 'remove_track', track: name })
+    if (noLayers) cmds.push({ type: 'transport', action: 'stop' })
     await useStore.getState().applyCommands(cmds)
     createdRef.current = []
+    analysisRef.current = null
     setSummary(null)
     setError(null)
     setElapsed(0)
     setPhase('idle')
+    if (noLayers) {
+      sessionBpmRef.current = null
+      sessionBarsRef.current = null
+      layerRef.current = 0
+    }
+  }
+
+  async function removeLayer(id: string) {
+    const layer = layers.find((l) => l.id === id)
+    if (!layer) return
+    const rest = layers.filter((l) => l.id !== id)
+    const empty = rest.length === 0 && createdRef.current.length === 0
+    const cmds: any[] = layer.trackNames.map((n) => ({ type: 'remove_track', track: n }))
+    if (empty) cmds.push({ type: 'transport', action: 'stop' })
+    await useStore.getState().applyCommands(cmds)
+    setLayers(rest)
+    if (empty) {
+      sessionBpmRef.current = null
+      sessionBarsRef.current = null
+      layerRef.current = 0
+    }
+  }
+
+  async function toggleMute(id: string) {
+    const layer = layers.find((l) => l.id === id)
+    if (!layer) return
+    const muted = !layer.muted
+    await useStore.getState().applyCommands(layer.trackNames.map((n) => ({ type: 'set_track_mute', track: n, muted })))
+    setLayers((ls) => ls.map((l) => (l.id === id ? { ...l, muted } : l)))
   }
 
   if (!open) return null
@@ -297,9 +374,25 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
         </div>
 
         <p className="jam-sub">
-          Beatbox a groove — kicks, snares, and hats with your mouth. Jamalam finds the hits,
-          figures out the tempo, and turns them into a real drum kit you can play and edit.
+          {layers.length > 0
+            ? 'Loop is playing — beatbox another part to stack it on top (kick, snare, hats).'
+            : 'Beatbox a groove — kicks, snares, and hats with your mouth. Jamalam finds the hits, figures out the tempo, and turns them into a real drum kit you can play and edit.'}
         </p>
+
+        {layers.length > 0 && (
+          <div className="jam-layers">
+            {layers.map((l) => (
+              <div key={l.id} className={`jam-layer ${l.muted ? 'muted' : ''}`}>
+                <button className="jam-layer-name" onClick={() => toggleMute(l.id)}>
+                  {l.muted ? '🔇' : '🔊'} {l.name}
+                </button>
+                <button className="jam-layer-x" onClick={() => removeLayer(l.id)} aria-label="remove part">
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {(phase === 'idle' || phase === 'done') && (
           <div className="mic-picker">
@@ -337,6 +430,11 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
           ) : (
             <button className="jam-stop" disabled>
               Converting…
+            </button>
+          )}
+          {phase === 'done' && (
+            <button className="jam-keep" onClick={keepAsTrack} title="Keep this take as its own looping part">
+              ＋ Keep as track
             </button>
           )}
           {phase === 'done' && (

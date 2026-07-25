@@ -329,6 +329,53 @@ body {
   gap: 10px;
   justify-content: center;
 }
+.jam-keep {
+  background: #4cc9a0;
+  color: #06231b;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 20px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.jam-layers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.jam-layer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 2px 4px 2px 2px;
+}
+.jam-layer.muted {
+  opacity: 0.45;
+}
+.jam-layer-name {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 9px 8px;
+  cursor: pointer;
+}
+.jam-layer-x {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 15px;
+  padding: 9px 12px;
+  cursor: pointer;
+}
 .jam-rec,
 .jam-stop,
 .jam-flag,
