@@ -10,12 +10,20 @@ function fmt(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
+// audio constraints for a given input device ('' = system default)
+function micConstraints(deviceId: string): MediaStreamConstraints {
+  const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+  return { audio: deviceId ? { ...base, deviceId: { exact: deviceId } } : base }
+}
+
 export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [elapsed, setElapsed] = useState(0)
   const [level, setLevel] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [summary, setSummary] = useState<{ bpm: number; counts: Record<string, number>; total: number } | null>(null)
+  const [devices, setDevices] = useState<{ id: string; label: string }[]>([])
+  const [deviceId, setDeviceId] = useState<string>('') // '' = system default
 
   const recRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -28,9 +36,89 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
   const peakRef = useRef(0) // loudest input seen this take — detects a silent mic
   const createdRef = useRef<string[]>([]) // drum tracks this take added, so Delete can remove them
 
+  // ---- live input monitor (so you can pick a mic and SEE it register) ----
+  const monStreamRef = useRef<MediaStream | null>(null)
+  const monCtxRef = useRef<AudioContext | null>(null)
+  const monRafRef = useRef(0)
+
+  function stopMonitor() {
+    cancelAnimationFrame(monRafRef.current)
+    try {
+      monStreamRef.current?.getTracks().forEach((t) => t.stop())
+    } catch {
+      // ignore
+    }
+    try {
+      monCtxRef.current?.close()
+    } catch {
+      // ignore
+    }
+    monStreamRef.current = null
+    monCtxRef.current = null
+  }
+
+  async function refreshDevices() {
+    try {
+      const list = await navigator.mediaDevices.enumerateDevices()
+      const mics = list
+        .filter((d) => d.kind === 'audioinput')
+        .map((d, i) => ({ id: d.deviceId, label: d.label || `Microphone ${i + 1}` }))
+      setDevices(mics)
+    } catch {
+      // ignore
+    }
+  }
+
+  // Open a live stream on the chosen device and drive the meter, so the user
+  // can confirm the mic actually registers before recording.
+  async function startMonitor(id: string) {
+    stopMonitor()
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(micConstraints(id))
+      monStreamRef.current = stream
+      void refreshDevices() // labels are only populated once permission is granted
+      const ctx = new AudioContext()
+      monCtxRef.current = ctx
+      const src = ctx.createMediaStreamSource(stream)
+      const an = ctx.createAnalyser()
+      an.fftSize = 2048
+      src.connect(an)
+      const buf = new Float32Array(2048)
+      const tick = () => {
+        an.getFloatTimeDomainData(buf as any)
+        let p = 0
+        for (const v of buf) {
+          const abs = v < 0 ? -v : v
+          if (abs > p) p = abs
+        }
+        setLevel(p)
+        monRafRef.current = requestAnimationFrame(tick)
+      }
+      monRafRef.current = requestAnimationFrame(tick)
+    } catch (e: any) {
+      setError(
+        e?.name === 'NotAllowedError'
+          ? 'Microphone blocked. Allow mic access, then reopen this panel.'
+          : e?.message || 'Could not open that microphone. Try another device.',
+      )
+    }
+  }
+
+  // run the monitor while the panel is open and idle; stop it while recording
+  useEffect(() => {
+    if (open && (phase === 'idle' || phase === 'done')) {
+      void startMonitor(deviceId)
+    } else {
+      stopMonitor()
+    }
+    return () => stopMonitor()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, deviceId, phase])
+
   useEffect(() => () => cleanup(), [])
   function cleanup() {
     cancelAnimationFrame(rafRef.current)
+    stopMonitor()
     try {
       streamRef.current?.getTracks().forEach((t) => t.stop())
     } catch {
@@ -47,12 +135,11 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
     setError(null)
     setSummary(null)
     peakRef.current = 0
+    stopMonitor() // free the device so the recording stream can open it
     // unlock the audio engine within this click gesture so playback works later
     engine.ensureStarted().catch(() => {})
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      })
+      const stream = await navigator.mediaDevices.getUserMedia(micConstraints(deviceId))
       streamRef.current = stream
       const ctx = new AudioContext()
       ctxRef.current = ctx
@@ -200,6 +287,25 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
           Beatbox a groove — kicks, snares, and hats with your mouth. Jamalam finds the hits,
           figures out the tempo, and turns them into a real drum kit you can play and edit.
         </p>
+
+        {(phase === 'idle' || phase === 'done') && (
+          <div className="mic-picker">
+            <label className="mic-label">
+              🎙 Mic
+              <select value={deviceId} onChange={(e) => setDeviceId(e.target.value)}>
+                <option value="">System default</option>
+                {devices.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className={`mic-live ${level > 0.02 ? 'on' : ''}`}>
+              {level > 0.02 ? '● receiving signal' : 'talk/beatbox — the bar should move ↓'}
+            </span>
+          </div>
+        )}
 
         <div className="jam-meter">
           <div className="jam-meter-fill" style={{ width: `${meterPct}%` }} />

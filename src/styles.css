@@ -174,6 +174,38 @@ body {
 .jam-sub.recording {
   color: #ef6461;
 }
+.mic-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 8px;
+  flex-wrap: wrap;
+}
+.mic-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.mic-label select {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  max-width: 260px;
+}
+.mic-live {
+  font-size: 12px;
+  color: var(--muted);
+}
+.mic-live.on {
+  color: #4cc9a0;
+  font-weight: 600;
+}
 .jam-meter {
   height: 12px;
   background: var(--panel-2);
