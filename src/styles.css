@@ -63,6 +63,32 @@ body {
   background: #ef6461;
   color: #1a0606;
 }
+.transport .test-sound {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.transport .test-sound:hover {
+  color: var(--text, #e8eef4);
+  border-color: var(--accent);
+}
+.transport .master-meter {
+  width: 70px;
+  height: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.transport .master-meter-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4cc9a0, #e6c229 70%, #ef6461);
+  transition: width 50ms linear;
+}
 .transport .meta {
   display: flex;
   gap: 8px;

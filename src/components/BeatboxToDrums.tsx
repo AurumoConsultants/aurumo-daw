@@ -25,6 +25,7 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
   const startRef = useRef(0)
   const rafRef = useRef(0)
   const bufRef = useRef<Float32Array>(new Float32Array(2048))
+  const peakRef = useRef(0) // loudest input seen this take — detects a silent mic
 
   useEffect(() => () => cleanup(), [])
   function cleanup() {
@@ -44,6 +45,7 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
   async function start() {
     setError(null)
     setSummary(null)
+    peakRef.current = 0
     // unlock the audio engine within this click gesture so playback works later
     engine.ensureStarted().catch(() => {})
     try {
@@ -80,6 +82,7 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
             const abs = v < 0 ? -v : v
             if (abs > p) p = abs
           }
+          if (p > peakRef.current) peakRef.current = p
           setLevel(p)
         }
         rafRef.current = requestAnimationFrame(tick)
@@ -105,6 +108,18 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
       const ctx = ctxRef.current ?? new AudioContext()
       const audio = await ctx.decodeAudioData(await blob.arrayBuffer())
       streamRef.current?.getTracks().forEach((t) => t.stop())
+
+      // If the mic never registered any signal, the recording is silent — this is
+      // almost always a Windows mic-permission or wrong-input-device problem, not
+      // the user beatboxing too quietly. Give the actionable message.
+      if (peakRef.current < 0.012) {
+        setError(
+          'Mic captured silence (input level ~0). Windows is likely blocking the mic or the wrong input device is selected. ' +
+            'Open Windows Settings → Privacy & security → Microphone, allow desktop apps, and pick your mic as the default input.',
+        )
+        setPhase('idle')
+        return
+      }
 
       const analysis = analyzeBeatbox(audio)
       if (!analysis.hits.length) {

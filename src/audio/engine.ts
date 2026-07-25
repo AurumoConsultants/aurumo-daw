@@ -54,10 +54,26 @@ class Engine {
   private started = false
   private loopBars = 4
   currentKit = '808'
+  // master bus so we can meter everything that reaches the speakers
+  private master = new Tone.Gain(1).toDestination()
+  private meter = new Tone.Meter()
+
+  constructor() {
+    this.master.connect(this.meter)
+  }
 
   async ensureStarted() {
     if (!this.started) {
       await Tone.start()
+      // some Electron/OS setups start the context suspended — force it awake
+      const ctx = Tone.getContext().rawContext as AudioContext
+      if (ctx.state !== 'running') {
+        try {
+          await ctx.resume()
+        } catch {
+          // ignore
+        }
+      }
       Tone.Transport.loop = true
       Tone.Transport.loopStart = 0
       Tone.Transport.loopEnd = `${this.loopBars}m`
@@ -66,13 +82,42 @@ class Engine {
     await kits.ensure(this.currentKit)
   }
 
+  /** 0..1 master output level (for a "is sound actually being produced?" meter). */
+  getLevel(): number {
+    const db = this.meter.getValue() as number
+    if (!isFinite(db)) return 0
+    return Math.max(0, Math.min(1, (db + 60) / 60))
+  }
+
+  /** Play a short, loud test tone through the master bus to check the output path. */
+  async testBeep() {
+    await this.ensureStarted()
+    const osc = new Tone.Oscillator(440, 'sine')
+    const vol = new Tone.Volume(-6).connect(this.master)
+    osc.connect(vol)
+    osc.start()
+    osc.stop('+0.5')
+    osc.onstop = () => {
+      try {
+        osc.dispose()
+        vol.dispose()
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  isStarted(): boolean {
+    return this.started
+  }
+
   setKit(name: string) {
     this.currentKit = name
     kits.ensure(name)
   }
 
   private buildVoice(type: InstrumentType): Voice {
-    const volume = new Tone.Volume(-6).toDestination()
+    const volume = new Tone.Volume(-6).connect(this.master)
 
     if (isDrum(type)) {
       const piece = type as DrumPiece
