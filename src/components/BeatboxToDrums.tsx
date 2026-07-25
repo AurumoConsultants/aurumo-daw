@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../state/store'
 import { engine } from '../audio/engine'
-import { analyzeBeatbox, type Hit, type BeatboxResult } from '../audio/beatbox'
+import { analyzeBeatbox, type Hit, type BeatboxResult, type DrumProfile } from '../audio/beatbox'
+import { loadProfile } from '../audio/profile'
+import BeatboxCalibrate from './BeatboxCalibrate'
+
+const DRUM_LABELS: Record<string, string> = { kick: 'kick', snare: 'snare', hihat: 'hi-hat', openhat: 'open-hat' }
 
 type Phase = 'idle' | 'recording' | 'analyzing' | 'done'
 
@@ -24,6 +28,8 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
   const [summary, setSummary] = useState<{ bpm: number; counts: Record<string, number>; total: number } | null>(null)
   const [devices, setDevices] = useState<{ id: string; label: string }[]>([])
   const [deviceId, setDeviceId] = useState<string>('') // '' = system default
+  const [profile, setProfile] = useState<DrumProfile>({})
+  const [showCalib, setShowCalib] = useState(false)
 
   const recRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -105,15 +111,18 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
   }
 
   // run the monitor while the panel is open and idle; stop it while recording
+  // or while the calibration modal owns the mic
   useEffect(() => {
-    if (open && (phase === 'idle' || phase === 'done')) {
+    if (open && !showCalib && (phase === 'idle' || phase === 'done')) {
       void startMonitor(deviceId)
     } else {
       stopMonitor()
     }
     return () => stopMonitor()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, deviceId, phase])
+  }, [open, deviceId, phase, showCalib])
+
+  useEffect(() => setProfile(loadProfile()), [])
 
   useEffect(() => () => cleanup(), [])
   function cleanup() {
@@ -209,7 +218,7 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
         return
       }
 
-      const analysis = analyzeBeatbox(audio)
+      const analysis = analyzeBeatbox(audio, loadProfile())
       if (!analysis.hits.length) {
         setError('No drum hits detected — try beatboxing a bit louder and closer to the mic.')
         setPhase('idle')
@@ -232,6 +241,7 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
       ['kick', 'Kick'],
       ['snare', 'Snare'],
       ['hihat', 'Hihat'],
+      ['openhat', 'Open Hat'],
     ]
     const cmds: any[] = [{ type: 'set_tempo', bpm: a.bpm }]
     const created: string[] = []
@@ -270,9 +280,12 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
   if (!open) return null
   const meterPct = Math.min(100, Math.round(level * 160))
   const busy = phase === 'recording' || phase === 'analyzing'
+  const calibratedTypes = Object.keys(profile)
+  const calibrated = calibratedTypes.length >= 2
 
   return (
-    <div className="modal-backdrop">
+    <>
+      <div className="modal-backdrop">
       <div className="jam">
         <div className="jam-head">
           <h2>🥁 Beatbox → Drums</h2>
@@ -338,14 +351,36 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
         {summary && phase === 'done' && (
           <div className="jam-saved">
             ✓ {summary.total} hits →{' '}
-            {['kick', 'snare', 'hihat']
+            {['kick', 'snare', 'hihat', 'openhat']
               .filter((k) => summary.counts[k])
-              .map((k) => `${summary.counts[k]} ${k}`)
+              .map((k) => `${summary.counts[k]} ${DRUM_LABELS[k] || k}`)
               .join(' · ')}{' '}
             · ~{summary.bpm} BPM. Drum tracks added — playing now.
           </div>
         )}
+
+        {!busy && (
+          <div className="calib-status">
+            <span className={calibrated ? 'calib-ok' : 'calib-none'}>
+              {calibrated
+                ? `🎚 Tuned to you: ${calibratedTypes.map((t) => DRUM_LABELS[t] || t).join(', ')}`
+                : 'Using generic detection — calibrate for better accuracy'}
+            </span>
+            <button className="calib-btn" onClick={() => setShowCalib(true)}>
+              {calibrated ? 'Re-calibrate' : '🎚 Calibrate to your voice'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
+
+    <BeatboxCalibrate
+      open={showCalib}
+      onClose={() => setShowCalib(false)}
+      deviceId={deviceId}
+      initial={profile}
+      onSaved={setProfile}
+    />
+    </>
   )
 }

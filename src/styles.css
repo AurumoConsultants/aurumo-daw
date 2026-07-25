@@ -206,6 +206,104 @@ body {
   color: #4cc9a0;
   font-weight: 600;
 }
+/* calibration status row inside the beatbox panel */
+.calib-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.calib-ok {
+  color: #4cc9a0;
+}
+.calib-none {
+  color: var(--muted);
+}
+.calib-btn {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.calib-btn:hover {
+  background: var(--accent);
+  color: #06121d;
+}
+/* calibration wizard */
+.jam.calib {
+  max-width: 460px;
+}
+.calib-steps {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 4px 0 14px;
+}
+.calib-dot {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.calib-dot.cur {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.calib-dot.ok {
+  background: #4cc9a0;
+  border-color: #4cc9a0;
+  color: #06121d;
+}
+.calib-card {
+  text-align: center;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.calib-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+.calib-cue {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 6px 0 10px;
+}
+.calib-say {
+  font-size: 22px;
+  letter-spacing: 2px;
+  color: var(--accent);
+  font-weight: 700;
+}
+.calib-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.calib-count {
+  font-size: 12px;
+  color: var(--muted);
+}
 .jam-meter {
   height: 12px;
   background: var(--panel-2);
