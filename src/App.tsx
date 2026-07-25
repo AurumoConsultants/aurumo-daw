@@ -18,10 +18,11 @@ export default function App() {
 
   useEffect(() => {
     if (!window.daw) return
-    window.daw.getKeyStatus().then((r) => {
-      setHasKey(r.hasKey)
-      if (!r.hasKey) setShowKey(true)
-    })
+    // Only reflect key status on the gear button. Do NOT auto-open the dialog:
+    // the API key is optional (needed for Claude chat only, not the DAW/beatbox),
+    // so it must never block every launch. The user opens it from ⚙ Connect,
+    // and the chat panel prompts on demand via onNeedsKey.
+    window.daw.getKeyStatus().then((r) => setHasKey(r.hasKey))
   }, [setHasKey])
 
   return (
