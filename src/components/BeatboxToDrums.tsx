@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../state/store'
 import { engine } from '../audio/engine'
-import { analyzeBeatbox, type Hit } from '../audio/beatbox'
+import { analyzeBeatbox, type Hit, type BeatboxResult } from '../audio/beatbox'
 
 type Phase = 'idle' | 'recording' | 'analyzing' | 'done'
 
@@ -106,17 +106,17 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
       const audio = await ctx.decodeAudioData(await blob.arrayBuffer())
       streamRef.current?.getTracks().forEach((t) => t.stop())
 
-      const { bpm, hits } = analyzeBeatbox(audio)
-      if (!hits.length) {
+      const analysis = analyzeBeatbox(audio)
+      if (!analysis.hits.length) {
         setError('No drum hits detected — try beatboxing a bit louder and closer to the mic.')
         setPhase('idle')
         return
       }
-      await buildDrums(bpm, hits)
+      await buildDrums(analysis)
 
       const counts: Record<string, number> = {}
-      for (const h of hits) counts[h.type] = (counts[h.type] || 0) + 1
-      setSummary({ bpm, counts, total: hits.length })
+      for (const h of analysis.hits) counts[h.type] = (counts[h.type] || 0) + 1
+      setSummary({ bpm: analysis.bpm, counts, total: analysis.hits.length })
       setPhase('done')
     } catch (e: any) {
       setError(e?.message || 'Could not analyze the recording.')
@@ -124,28 +124,27 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
     }
   }
 
-  async function buildDrums(bpm: number, hits: Hit[]) {
-    const spb = bpm / 60 // seconds-per-beat inverse: beats = seconds * spb
+  async function buildDrums(a: BeatboxResult) {
     const order: Array<[Hit['type'], string]> = [
       ['kick', 'Kick'],
       ['snare', 'Snare'],
       ['hihat', 'Hihat'],
     ]
-    const cmds: any[] = [{ type: 'set_tempo', bpm }]
-    let maxBeat = 0
+    const cmds: any[] = [{ type: 'set_tempo', bpm: a.bpm }]
     for (const [type, name] of order) {
-      const group = hits.filter((h) => h.type === type)
+      const group = a.hits.filter((h) => h.type === type)
       if (!group.length) continue
       cmds.push({ type: 'add_track', name, instrument: type })
       cmds.push({ type: 'clear_track', track: name })
-      const notes = group.map((h) => {
-        const start = Math.round(h.time * spb * 1000) / 1000
-        if (start > maxBeat) maxBeat = start
-        return { pitch: 'C2', start, duration: 0.25, velocity: Math.round(h.velocity * 100) / 100 }
-      })
+      const notes = group.map((h) => ({
+        pitch: 'C2',
+        start: h.beat,
+        duration: 0.25,
+        velocity: Math.round(h.velocity * 100) / 100,
+      }))
       cmds.push({ type: 'add_notes', track: name, notes })
     }
-    cmds.push({ type: 'set_loop', bars: Math.max(1, Math.ceil((maxBeat + 0.5) / 4)) })
+    cmds.push({ type: 'set_loop', bars: a.bars })
     cmds.push({ type: 'transport', action: 'play' })
     await useStore.getState().applyCommands(cmds)
   }
