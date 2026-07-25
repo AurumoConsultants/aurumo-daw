@@ -56,7 +56,30 @@ function writeConfig(cfg: Record<string, string>) {
   fs.writeFileSync(configPath(), JSON.stringify(cfg, null, 2))
 }
 function getApiKey(): string | undefined {
-  return readConfig().anthropicApiKey || process.env.ANTHROPIC_API_KEY
+  // 1. this app's config
+  const cur = readConfig().anthropicApiKey
+  if (cur && cur.trim()) return cur.trim()
+  // 2. env / .env
+  if (process.env.ANTHROPIC_API_KEY?.trim()) return process.env.ANTHROPIC_API_KEY.trim()
+  // 3. resilience against the app's rename history — scan prior userData folders
+  //    and migrate the key into this app's config so it sticks.
+  const appData = app.getPath('appData')
+  for (const name of ['Jamalam Studio', 'jamalam-studio', 'Aurumo DAW', 'claude-daw']) {
+    try {
+      const p = path.join(appData, name, 'config.json')
+      if (!fs.existsSync(p)) continue
+      const k = (JSON.parse(fs.readFileSync(p, 'utf-8')).anthropicApiKey as string) || ''
+      if (k.trim()) {
+        const cfg = readConfig()
+        cfg.anthropicApiKey = k.trim()
+        writeConfig(cfg)
+        return k.trim()
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return undefined
 }
 
 function createWindow() {
