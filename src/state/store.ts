@@ -64,7 +64,7 @@ export const useStore = create<State>((set, get) => ({
 
   setHasKey: (v) => set({ hasKey: v }),
   setKit: (name) => {
-    engine.setKit(name)
+    void engine.setKit(name)
     set({ kit: name })
   },
   selectTrack: (id) => set({ selectedTrackId: id }),
@@ -82,6 +82,16 @@ export const useStore = create<State>((set, get) => ({
   },
 
   applyCommands: async (commands) => {
+    // Make sure the audio engine is started AND the current kit is fully
+    // rendered before we build any tracks. Otherwise a Tone.Offline kit render
+    // can hold the global audio context while a voice is created, which throws
+    // "cannot connect to an AudioNode belonging to a different audio context".
+    try {
+      await engine.ensureStarted()
+    } catch {
+      // ignore — playback commands below will retry
+    }
+
     let tracks = get().tracks.slice()
     let tempo = get().tempo
     let loopBars = get().loopBars
@@ -106,7 +116,7 @@ export const useStore = create<State>((set, get) => ({
         }
         case 'set_kit': {
           kit = String(cmd.kit || kit)
-          engine.setKit(kit)
+          await engine.setKit(kit) // await the render so no voice is built mid-render
           break
         }
         case 'add_track': {

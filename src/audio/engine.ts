@@ -54,12 +54,20 @@ class Engine {
   private started = false
   private loopBars = 4
   currentKit = '808'
-  // master bus so we can meter everything that reaches the speakers
-  private master = new Tone.Gain(1).toDestination()
-  private meter = new Tone.Meter()
+  // master bus so we can meter everything that reaches the speakers.
+  // Created lazily INSIDE the live realtime context (never at module load, and
+  // never while a Tone.Offline kit render holds the global context) so voices
+  // and the master always share one context.
+  private master?: Tone.Gain
+  private meter?: Tone.Meter
 
-  constructor() {
-    this.master.connect(this.meter)
+  private ensureBus(): Tone.Gain {
+    if (!this.master) {
+      this.master = new Tone.Gain(1).toDestination()
+      this.meter = new Tone.Meter()
+      this.master.connect(this.meter)
+    }
+    return this.master
   }
 
   async ensureStarted() {
@@ -74,18 +82,21 @@ class Engine {
           // ignore
         }
       }
+      this.ensureBus() // build the master bus in the live realtime context
       Tone.Transport.loop = true
       Tone.Transport.loopStart = 0
       Tone.Transport.loopEnd = `${this.loopBars}m`
       this.started = true
     }
+    // finish any kit rendering NOW, so no Tone.Offline render is in flight
+    // later while we build voices (that is what caused cross-context errors).
     await kits.ensure(this.currentKit)
   }
 
   /** 0..1 master output level (for a "is sound actually being produced?" meter). */
   getLevel(): number {
-    const db = this.meter.getValue() as number
-    if (!isFinite(db)) return 0
+    const db = this.meter?.getValue() as number
+    if (db == null || !isFinite(db)) return 0
     return Math.max(0, Math.min(1, (db + 60) / 60))
   }
 
@@ -93,7 +104,7 @@ class Engine {
   async testBeep() {
     await this.ensureStarted()
     const osc = new Tone.Oscillator(440, 'sine')
-    const vol = new Tone.Volume(-6).connect(this.master)
+    const vol = new Tone.Volume(-6).connect(this.ensureBus())
     osc.connect(vol)
     osc.start()
     osc.stop('+0.5')
@@ -111,13 +122,16 @@ class Engine {
     return this.started
   }
 
-  setKit(name: string) {
+  // Await the kit render so callers can guarantee it's finished before building
+  // voices (prevents a Tone.Offline render from holding the global context while
+  // a voice is created → cross-context connect error / silent voice).
+  async setKit(name: string) {
     this.currentKit = name
-    kits.ensure(name)
+    await kits.ensure(name)
   }
 
   private buildVoice(type: InstrumentType): Voice {
-    const volume = new Tone.Volume(-6).connect(this.master)
+    const volume = new Tone.Volume(-6).connect(this.ensureBus())
 
     if (isDrum(type)) {
       const piece = type as DrumPiece

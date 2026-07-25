@@ -1,7 +1,7 @@
 {
   "name": "jamalam-studio",
   "productName": "Jamalam Studio",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Jamalam Studio — desktop editing & export workbench for jams recorded in Jamalam",
   "main": "dist-electron/main.js",
   "author": {
