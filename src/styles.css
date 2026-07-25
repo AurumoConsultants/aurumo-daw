@@ -201,13 +201,23 @@ body {
 }
 .jam-rec,
 .jam-stop,
-.jam-flag {
+.jam-flag,
+.jam-delete {
   border: none;
   border-radius: 10px;
   padding: 12px 22px;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
+}
+.jam-delete {
+  background: transparent;
+  color: #ef6461;
+  border: 1px solid #ef6461;
+}
+.jam-delete:hover {
+  background: #ef6461;
+  color: #fff;
 }
 .jam-rec {
   background: #ef6461;

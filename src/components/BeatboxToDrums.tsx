@@ -26,6 +26,7 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
   const rafRef = useRef(0)
   const bufRef = useRef<Float32Array>(new Float32Array(2048))
   const peakRef = useRef(0) // loudest input seen this take — detects a silent mic
+  const createdRef = useRef<string[]>([]) // drum tracks this take added, so Delete can remove them
 
   useEffect(() => () => cleanup(), [])
   function cleanup() {
@@ -146,9 +147,11 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
       ['hihat', 'Hihat'],
     ]
     const cmds: any[] = [{ type: 'set_tempo', bpm: a.bpm }]
+    const created: string[] = []
     for (const [type, name] of order) {
       const group = a.hits.filter((h) => h.type === type)
       if (!group.length) continue
+      created.push(name)
       cmds.push({ type: 'add_track', name, instrument: type })
       cmds.push({ type: 'clear_track', track: name })
       const notes = group.map((h) => ({
@@ -159,9 +162,22 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
       }))
       cmds.push({ type: 'add_notes', track: name, notes })
     }
+    createdRef.current = created
     cmds.push({ type: 'set_loop', bars: a.bars })
     cmds.push({ type: 'transport', action: 'play' })
     await useStore.getState().applyCommands(cmds)
+  }
+
+  // discard the current take: stop playback and remove the drum tracks it added
+  async function discard() {
+    const cmds: any[] = [{ type: 'transport', action: 'stop' }]
+    for (const name of createdRef.current) cmds.push({ type: 'remove_track', track: name })
+    await useStore.getState().applyCommands(cmds)
+    createdRef.current = []
+    setSummary(null)
+    setError(null)
+    setElapsed(0)
+    setPhase('idle')
   }
 
   if (!open) return null
@@ -193,7 +209,7 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
         <div className="jam-controls">
           {phase === 'idle' || phase === 'done' ? (
             <button className="jam-rec" onClick={start}>
-              ● Beatbox
+              ● {phase === 'done' ? 'Beatbox again' : 'Beatbox'}
             </button>
           ) : phase === 'recording' ? (
             <button className="jam-stop" onClick={stop}>
@@ -202,6 +218,11 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
           ) : (
             <button className="jam-stop" disabled>
               Converting…
+            </button>
+          )}
+          {phase === 'done' && (
+            <button className="jam-delete" onClick={discard} title="Discard this take and remove its drum tracks">
+              🗑 Delete
             </button>
           )}
         </div>
