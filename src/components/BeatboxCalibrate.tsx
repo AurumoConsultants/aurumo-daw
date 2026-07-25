@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { profileFromBuffer, type DrumProfile, type DrumType } from '../audio/beatbox'
-import { saveProfile } from '../audio/profile'
+import { saveProfile, clearProfile } from '../audio/profile'
 
 const STEPS: { type: DrumType; title: string; cue: string; say: string }[] = [
   { type: 'kick', title: 'Kick / Bass drum', cue: 'Deep chest "b" — like "boom" / "buh"', say: 'b · b · b · b' },
@@ -153,6 +153,16 @@ export default function BeatboxCalibrate({
     onClose()
   }
 
+  // wipe the whole profile and start from scratch (back to generic detection)
+  function reset() {
+    clearProfile()
+    profileRef.current = {}
+    setCaptured({})
+    setStep(0)
+    setError(null)
+    onSaved({})
+  }
+
   if (!open) return null
   const s = STEPS[step]
   const done = !!captured[s.type]
@@ -217,7 +227,15 @@ export default function BeatboxCalibrate({
         {error && <div className="jam-error">{error}</div>}
 
         <div className="calib-foot">
-          <span className="calib-count">{capturedCount}/{STEPS.length} sounds captured</span>
+          <button
+            className="jam-delete"
+            onClick={reset}
+            disabled={recording || capturedCount === 0}
+            title="Clear calibration and start over"
+          >
+            ↺ Start over
+          </button>
+          <span className="calib-count">{capturedCount}/{STEPS.length}</span>
           <button
             className="jam-rec"
             onClick={finish}
