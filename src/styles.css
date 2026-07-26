@@ -329,6 +329,27 @@ body {
   gap: 10px;
   justify-content: center;
 }
+.mode-toggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.mode-toggle button {
+  flex: 1;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mode-toggle button.on {
+  background: var(--accent);
+  color: #06121d;
+  border-color: var(--accent);
+}
 .jam-keep {
   background: #4cc9a0;
   color: #06231b;

@@ -2,10 +2,18 @@ import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../state/store'
 import { engine } from '../audio/engine'
 import { analyzeBeatbox, requantize, type Hit, type BeatboxResult, type DrumProfile } from '../audio/beatbox'
+import { analyzeBassline, requantizeBass, type BasslineResult } from '../audio/bassline'
 import { loadProfile } from '../audio/profile'
 import BeatboxCalibrate from './BeatboxCalibrate'
 
-const DRUM_LABELS: Record<string, string> = { kick: 'kick', snare: 'snare', hihat: 'hi-hat', openhat: 'open-hat' }
+const DRUM_LABELS: Record<string, string> = {
+  kick: 'kick',
+  snare: 'snare',
+  hihat: 'hi-hat',
+  openhat: 'open-hat',
+  bass: 'bass',
+}
+type Mode = 'drums' | 'bass'
 
 interface Layer {
   id: string
@@ -33,12 +41,13 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
   const [elapsed, setElapsed] = useState(0)
   const [level, setLevel] = useState(0)
   const [error, setError] = useState<string | null>(null)
-  const [summary, setSummary] = useState<{ bpm: number; counts: Record<string, number>; total: number } | null>(null)
+  const [summary, setSummary] = useState<{ bpm: number; counts: Record<string, number>; total: number; kind: Mode } | null>(null)
   const [devices, setDevices] = useState<{ id: string; label: string }[]>([])
   const [deviceId, setDeviceId] = useState<string>('') // '' = system default
   const [profile, setProfile] = useState<DrumProfile>({})
   const [showCalib, setShowCalib] = useState(false)
   const [layers, setLayers] = useState<Layer[]>([])
+  const [mode, setMode] = useState<Mode>('drums')
 
   const recRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -51,6 +60,7 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
   const peakRef = useRef(0) // loudest input seen this take — detects a silent mic
   const createdRef = useRef<string[]>([]) // the un-kept preview take's track names
   const analysisRef = useRef<BeatboxResult | null>(null)
+  const bassRef = useRef<BasslineResult | null>(null)
   const layerRef = useRef(0) // number of parts kept (used to give new parts fresh names)
   const sessionBpmRef = useRef<number | null>(null) // locked once the first part is kept
   const sessionBarsRef = useRef<number | null>(null)
@@ -232,6 +242,24 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
         return
       }
 
+      if (mode === 'bass') {
+        const locked = sessionBpmRef.current != null
+        const analysis = analyzeBassline(
+          audio,
+          locked ? { bpm: sessionBpmRef.current as number, bars: sessionBarsRef.current as number } : {},
+        )
+        if (!analysis.notes.length) {
+          setError('No pitch detected — hum or sing a clear bassline, sustained and close to the mic.')
+          setPhase('idle')
+          return
+        }
+        bassRef.current = analysis
+        const built = await buildBass(analysis)
+        setSummary({ bpm: built.bpm, counts: { bass: built.count }, total: built.count, kind: 'bass' })
+        setPhase('done')
+        return
+      }
+
       const analysis = analyzeBeatbox(audio, loadProfile())
       if (!analysis.hits.length) {
         setError('No drum hits detected — try beatboxing a bit louder and closer to the mic.')
@@ -243,7 +271,7 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
 
       const counts: Record<string, number> = {}
       for (const h of built.hits) counts[h.type] = (counts[h.type] || 0) + 1
-      setSummary({ bpm: built.bpm, counts, total: built.hits.length })
+      setSummary({ bpm: built.bpm, counts, total: built.hits.length, kind: 'drums' })
       setPhase('done')
     } catch (e: any) {
       setError(e?.message || 'Could not analyze the recording.')
@@ -293,19 +321,46 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
     return { bpm, hits }
   }
 
+  // Build the current (un-kept) bass take. Snaps to the session grid when locked.
+  async function buildBass(a: BasslineResult): Promise<{ bpm: number; count: number }> {
+    const locked = sessionBpmRef.current != null
+    const bpm = locked ? (sessionBpmRef.current as number) : a.bpm
+    const bars = locked ? (sessionBarsRef.current as number) : a.bars
+    const notes = locked ? requantizeBass(a.raw, bpm, bars).notes : a.notes
+    const suffix = layerRef.current === 0 ? '' : ` ${layerRef.current + 1}`
+    const name = `Bass${suffix}`
+
+    const cmds: any[] = [{ type: 'set_tempo', bpm }]
+    for (const n of createdRef.current) cmds.push({ type: 'remove_track', track: n })
+    cmds.push({ type: 'add_track', name, instrument: 'bass' })
+    cmds.push({ type: 'clear_track', track: name })
+    cmds.push({
+      type: 'add_notes',
+      track: name,
+      notes: notes.map((n) => ({ pitch: n.pitch, start: n.start, duration: n.duration, velocity: n.velocity })),
+    })
+    createdRef.current = [name]
+    cmds.push({ type: 'set_loop', bars })
+    cmds.push({ type: 'transport', action: 'play' })
+    await useStore.getState().applyCommands(cmds)
+    return { bpm, count: notes.length }
+  }
+
   // Commit the current take as its own looping part.
   function keepAsTrack() {
-    if (!createdRef.current.length || !analysisRef.current) return
+    if (!createdRef.current.length || !summary) return
     if (sessionBpmRef.current == null) {
-      sessionBpmRef.current = summary?.bpm ?? analysisRef.current.bpm
-      sessionBarsRef.current = analysisRef.current.bars
+      const src = analysisRef.current ?? bassRef.current
+      sessionBpmRef.current = summary.bpm
+      sessionBarsRef.current = src ? src.bars : 1
     }
-    const types = summary ? Object.keys(summary.counts) : []
+    const types = Object.keys(summary.counts)
     const name = types.map((t) => DRUM_LABELS[t] || t).join(' + ') || 'Part'
     setLayers((ls) => [...ls, { id: `L${Date.now().toString(36)}`, name, trackNames: createdRef.current.slice(), muted: false }])
     layerRef.current += 1
     createdRef.current = []
     analysisRef.current = null
+    bassRef.current = null
     setSummary(null)
     setPhase('idle')
   }
@@ -319,6 +374,7 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
     await useStore.getState().applyCommands(cmds)
     createdRef.current = []
     analysisRef.current = null
+    bassRef.current = null
     setSummary(null)
     setError(null)
     setElapsed(0)
@@ -374,10 +430,25 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
         </div>
 
         <p className="jam-sub">
-          {layers.length > 0
-            ? 'Loop is playing — beatbox another part to stack it on top (kick, snare, hats).'
-            : 'Beatbox a groove — kicks, snares, and hats with your mouth. Jamalam finds the hits, figures out the tempo, and turns them into a real drum kit you can play and edit.'}
+          {mode === 'bass'
+            ? layers.length > 0
+              ? 'Loop is playing — hum or sing a bassline to add a bass track on top.'
+              : 'Hum or sing a bassline — Jamalam tracks the pitch and turns your voice into a bass track.'
+            : layers.length > 0
+              ? 'Loop is playing — beatbox another part to stack it on top (kick, snare, hats).'
+              : 'Beatbox a groove — kicks, snares, and hats with your mouth. Jamalam turns them into a real drum kit.'}
         </p>
+
+        {(phase === 'idle' || phase === 'done') && (
+          <div className="mode-toggle">
+            <button className={mode === 'drums' ? 'on' : ''} onClick={() => setMode('drums')}>
+              🥁 Drums
+            </button>
+            <button className={mode === 'bass' ? 'on' : ''} onClick={() => setMode('bass')}>
+              🎸 Bass
+            </button>
+          </div>
+        )}
 
         {layers.length > 0 && (
           <div className="jam-layers">
@@ -421,7 +492,7 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
         <div className="jam-controls">
           {phase === 'idle' || phase === 'done' ? (
             <button className="jam-rec" onClick={start}>
-              ● {phase === 'done' ? 'Beatbox again' : 'Beatbox'}
+              ● {mode === 'bass' ? (phase === 'done' ? 'Hum again' : 'Hum bass') : phase === 'done' ? 'Beatbox again' : 'Beatbox'}
             </button>
           ) : phase === 'recording' ? (
             <button className="jam-stop" onClick={stop}>
@@ -448,16 +519,24 @@ export default function BeatboxToDrums({ open, onClose }: { open: boolean; onClo
 
         {summary && phase === 'done' && (
           <div className="jam-saved">
-            ✓ {summary.total} hits →{' '}
-            {['kick', 'snare', 'hihat', 'openhat']
-              .filter((k) => summary.counts[k])
-              .map((k) => `${summary.counts[k]} ${DRUM_LABELS[k] || k}`)
-              .join(' · ')}{' '}
-            · ~{summary.bpm} BPM. Drum tracks added — playing now.
+            {summary.kind === 'bass' ? (
+              <>
+                ✓ {summary.total} bass notes · ~{summary.bpm} BPM. Bass track added — playing now.
+              </>
+            ) : (
+              <>
+                ✓ {summary.total} hits →{' '}
+                {['kick', 'snare', 'hihat', 'openhat']
+                  .filter((k) => summary.counts[k])
+                  .map((k) => `${summary.counts[k]} ${DRUM_LABELS[k] || k}`)
+                  .join(' · ')}{' '}
+                · ~{summary.bpm} BPM. Drum tracks added — playing now.
+              </>
+            )}
           </div>
         )}
 
-        {!busy && (
+        {!busy && mode === 'drums' && (
           <div className="calib-status">
             <span className={calibrated ? 'calib-ok' : 'calib-none'}>
               {calibrated
